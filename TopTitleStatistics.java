@@ -126,20 +126,31 @@ public class TopTitleStatistics extends Configured implements Tool {
 
         @Override
         public void map(Object key, Text value, Context context) throws IOException, InterruptedException {
-            // TODO
+	    String line = value.toString();
+	    StringTokenizer tokenizer = new StringTokenizer(line, this.delimiters);
+	    while (tokenizer.hasMoreTokens()) {
+		String nextToken = tokenizer.nextToken();
+		if (!stopWords.contains(nextToken.trim().toLowerCase())) {
+		    context.write(new Text(nextToken.trim().toLowerCase()), new IntWritable(1));
+		}
+	    }
         }
     }
 
     public static class TitleCountReduce extends Reducer<Text, IntWritable, Text, IntWritable> {
         @Override
         public void reduce(Text key, Iterable<IntWritable> values, Context context) throws IOException, InterruptedException {
-            // TODO
+	    int sum = 0;
+	    for (IntWritable val : values) {
+		sum += val.get();
+	    }
+	    context.write(key, new IntWritable(sum));
         }
     }
 
     public static class TopTitlesStatMap extends Mapper<Text, Text, NullWritable, TextArrayWritable> {
         Integer N;
-        // TODO
+        private TreeSet<Pair<Integer, String>> countToWordMap = new TreeSet<Pair<Integer, String>>();
 
         @Override
         protected void setup(Context context) throws IOException,InterruptedException {
@@ -149,18 +160,27 @@ public class TopTitleStatistics extends Configured implements Tool {
 
         @Override
         public void map(Text key, Text value, Context context) throws IOException, InterruptedException {
-            // TODO
+    	    Integer count = Integer.parseInt(value.toString());
+    	    String word = key.toString();
+    	    countToWordMap.add(new Pair<Integer, String>(count, word));
+    	    if (countToWordMap.size() > this.N) {
+    		countToWordMap.remove(countToWordMap.first());
+    	    }
         }
 
         @Override
         protected void cleanup(Context context) throws IOException, InterruptedException {
-            // TODO
+    	    for (Pair<Integer, String> item : countToWordMap) {
+    		String[] strings = {item.second, item.first.toString()};
+    		TextArrayWritable val = new TextArrayWritable(strings);
+    		context.write(NullWritable.get(), val);
+    	    }
         }
     }
 
     public static class TopTitlesStatReduce extends Reducer<NullWritable, TextArrayWritable, Text, IntWritable> {
         Integer N;
-        // TODO
+        private TreeSet<Pair<Integer, String>> countToWordMap = new TreeSet<Pair<Integer, String>>();
 
         @Override
         protected void setup(Context context) throws IOException,InterruptedException {
@@ -170,9 +190,35 @@ public class TopTitleStatistics extends Configured implements Tool {
 
         @Override
         public void reduce(NullWritable key, Iterable<TextArrayWritable> values, Context context) throws IOException, InterruptedException {
-            Integer sum, mean, max, min, var;
+            Integer sum, mean, max, min, var, n;
 
-            // TODO
+    	    for (TextArrayWritable val: values) {
+    		Text[] pair= (Text[]) val.toArray();
+    		String word = pair[0].toString();
+    		Integer count = Integer.parseInt(pair[1].toString());
+    		countToWordMap.add(new Pair<Integer, String>(count, word));
+    		if (countToWordMap.size() > this.N) {
+    		    countToWordMap.remove(countToWordMap.first());
+    		}
+    	    }
+    	    sum = 0;
+    	    n = 0;
+    	    min = 100000;
+    	    max = -1;
+    	    for (Pair<Integer, String> item: countToWordMap) {
+    		Integer number = item.first;
+    		n += 1;
+    		sum += number;
+    		if (number > max) max = number;
+    		if (number < min) min = number;
+    	    }
+    	    mean = sum / n;
+    	    var = 0;
+    	    for (Pair<Integer, String> item: countToWordMap) {
+    		Integer number = item.first;
+    		var += (number - mean)*(number - mean);
+    	    }
+    	    var = var / n;
 
             context.write(new Text("Mean"), new IntWritable(mean));
             context.write(new Text("Sum"), new IntWritable(sum));

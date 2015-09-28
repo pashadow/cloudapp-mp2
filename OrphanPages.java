@@ -26,20 +26,47 @@ public class OrphanPages extends Configured implements Tool {
 
     @Override
     public int run(String[] args) throws Exception {
-        //TODO
+        Job job = Job.getInstance(this.getConf(), "Orphan Pages");
+        job.setOutputKeyClass(IntWritable.class);
+        job.setOutputValueClass(IntWritable.class);
+
+        job.setMapOutputKeyClass(IntWritable.class);
+        job.setMapOutputValueClass(IntWritable.class);
+
+        job.setMapperClass(LinkCountMap.class);
+        job.setReducerClass(OrphanPageReduce.class);
+
+        FileInputFormat.setInputPaths(job, new Path(args[0]));
+        FileOutputFormat.setOutputPath(job, new Path(args[1]));
+
+        job.setJarByClass(OrphanPages.class);
+        return job.waitForCompletion(true) ? 0 : 1;
     }
 
     public static class LinkCountMap extends Mapper<Object, Text, IntWritable, IntWritable> {
         @Override
         public void map(Object key, Text value, Context context) throws IOException, InterruptedException {
-            //TODO
-        }
-    }
+			String line = value.toString();
+			String[] parts = line.split(":");
+			Integer currentID = Integer.parseInt(parts[0].trim());
+			context.write(new IntWritable(currentID), new IntWritable(0));
+			StringTokenizer tokenizer = new StringTokenizer(parts[1].trim(), " ");
+			while (tokenizer.hasMoreTokens()) {
+				String nextToken = tokenizer.nextToken();
+				Integer linkID = Integer.parseInt(nextToken);
+				context.write(new IntWritable(linkID), new IntWritable(1));
+			}
+		}
+	}
 
     public static class OrphanPageReduce extends Reducer<IntWritable, IntWritable, IntWritable, NullWritable> {
         @Override
         public void reduce(IntWritable key, Iterable<IntWritable> values, Context context) throws IOException, InterruptedException {
-            //TODO
+    	    int sum = 0;
+    	    for (IntWritable val : values) {
+				sum += val.get();
+    	    }
+			if (sum == 0) context.write(key, NullWritable.get());
         }
     }
 }
